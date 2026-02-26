@@ -22,10 +22,21 @@ PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from local_config import LocalProfile
 from vnpy.event import EventEngine
 from vnpy.trader.app import BaseApp
 from vnpy.trader.engine import MainEngine
 from vnpy.trader.gateway import BaseGateway
+
+
+def parse_bool(value: str) -> bool:
+    """Parse bool from command line string."""
+    lowered: str = value.strip().lower()
+    if lowered in {"1", "true", "yes", "y"}:
+        return True
+    if lowered in {"0", "false", "no", "n"}:
+        return False
+    raise argparse.ArgumentTypeError(f"无法解析布尔值: {value}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -60,6 +71,29 @@ def parse_args() -> argparse.Namespace:
             "'module_a:ClassA,module_b:ClassB'. "
             "Example: 'vnpy_ctastrategy:CtaStrategyApp,vnpy_riskmanager:RiskManagerApp'"
         ),
+    )
+    parser.add_argument("--profile", default="default", help="Local profile name for crypto_mvp config.")
+    parser.add_argument(
+        "--auto-connect",
+        type=parse_bool,
+        default=False,
+        help="Whether to auto-connect gateway in no_ui mode.",
+    )
+    parser.add_argument("--api-key", default="", help="Gateway API key override.")
+    parser.add_argument("--api-secret", default="", help="Gateway API secret override.")
+    parser.add_argument(
+        "--server",
+        choices=["AUTO", "TESTNET", "REAL"],
+        default="AUTO",
+        help="Gateway server override. AUTO means using profile value.",
+    )
+    parser.add_argument("--proxy-host", default="", help="Proxy host override.")
+    parser.add_argument("--proxy-port", type=int, default=-1, help="Proxy port override.")
+    parser.add_argument(
+        "--kline-stream",
+        type=parse_bool,
+        default=None,
+        help="Kline stream switch for vnpy_binance gateway. None means profile default.",
     )
     args: argparse.Namespace = parser.parse_args()
 
@@ -156,11 +190,37 @@ def load_app_classes(spec: str) -> list[type[BaseApp]]:
     return app_classes
 
 
+def build_binance_gateway_setting(args: argparse.Namespace) -> dict[str, str | int]:
+    """Build gateway connection setting for vnpy_binance from profile and CLI overrides."""
+    market: str = args.market if args.market != "auto" else "spot"
+    profile = LocalProfile(profile=args.profile)
+    setting: dict[str, str | int] = profile.build_binance_gateway_setting(market)
+
+    if args.api_key:
+        setting["API Key"] = args.api_key
+    if args.api_secret:
+        setting["API Secret"] = args.api_secret
+    if args.server and args.server != "AUTO":
+        setting["Server"] = args.server
+
+    if args.kline_stream is not None:
+        setting["Kline Stream"] = "True" if args.kline_stream else "False"
+
+    if args.proxy_host:
+        setting["Proxy Host"] = args.proxy_host
+    if args.proxy_port >= 0:
+        setting["Proxy Port"] = args.proxy_port
+
+    return setting
+
+
 def bootstrap_engine(
     gateway_module: str,
     gateway_class_name: str,
     market: str,
     apps: str,
+    auto_connect: bool,
+    gateway_setting: dict[str, str | int] | None,
 ) -> tuple[MainEngine, EventEngine]:
     """Build MainEngine and load gateway/apps."""
     gateway_class: type[BaseGateway] = load_gateway_class(gateway_module, gateway_class_name, market)
@@ -175,24 +235,47 @@ def bootstrap_engine(
 
     print(f"[OK] 已加载网关: {gateway_class.__name__}")
     print(f"[OK] 已加载应用: {[cls.__name__ for cls in app_classes]}")
-    print("[NEXT] 请在UI中连接网关，或在脚本中调用 main_engine.connect(setting, gateway_name)")
+    if auto_connect and gateway_setting:
+        gateway_name: str = gateway_class.default_name
+        main_engine.connect(gateway_setting, gateway_name)
+        print(f"[OK] 已自动连接网关: {gateway_name}")
+    else:
+        print("[NEXT] 请在UI中连接网关，或在脚本中调用 main_engine.connect(setting, gateway_name)")
     return main_engine, event_engine
 
 
-def run_ui(gateway_module: str, gateway_class_name: str, market: str, apps: str) -> None:
+def run_ui(
+    gateway_module: str,
+    gateway_class_name: str,
+    market: str,
+    apps: str,
+    auto_connect: bool,
+    gateway_setting: dict[str, str | int] | None,
+) -> None:
     """Run with VeighNa Trader GUI."""
     from vnpy.trader.ui import MainWindow, create_qapp
 
     qapp = create_qapp()
-    main_engine, event_engine = bootstrap_engine(gateway_module, gateway_class_name, market, apps)
+    main_engine, event_engine = bootstrap_engine(
+        gateway_module, gateway_class_name, market, apps, auto_connect, gateway_setting
+    )
     main_window = MainWindow(main_engine, event_engine)
     main_window.showMaximized()
     qapp.exec()
 
 
-def run_no_ui(gateway_module: str, gateway_class_name: str, market: str, apps: str) -> None:
+def run_no_ui(
+    gateway_module: str,
+    gateway_class_name: str,
+    market: str,
+    apps: str,
+    auto_connect: bool,
+    gateway_setting: dict[str, str | int] | None,
+) -> None:
     """Run in no-UI mode and print startup status."""
-    main_engine, _ = bootstrap_engine(gateway_module, gateway_class_name, market, apps)
+    main_engine, _ = bootstrap_engine(
+        gateway_module, gateway_class_name, market, apps, auto_connect, gateway_setting
+    )
     print("[RUNNING] no_ui 模式已启动，按 Ctrl+C 退出。")
 
     try:
@@ -206,10 +289,31 @@ def run_no_ui(gateway_module: str, gateway_class_name: str, market: str, apps: s
 def main() -> None:
     """Program entry."""
     args = parse_args()
+
+    gateway_setting: dict[str, str | int] | None = None
+    if args.gateway_module == "vnpy_binance":
+        gateway_setting = build_binance_gateway_setting(args)
+    elif args.auto_connect:
+        print("[WARN] 当前仅对 vnpy_binance 提供自动连接参数构建，请手动连接。")
+
     if args.mode == "ui":
-        run_ui(args.gateway_module, args.gateway_class, args.market, args.apps)
+        run_ui(
+            args.gateway_module,
+            args.gateway_class,
+            args.market,
+            args.apps,
+            args.auto_connect,
+            gateway_setting,
+        )
     else:
-        run_no_ui(args.gateway_module, args.gateway_class, args.market, args.apps)
+        run_no_ui(
+            args.gateway_module,
+            args.gateway_class,
+            args.market,
+            args.apps,
+            args.auto_connect,
+            gateway_setting,
+        )
 
 
 if __name__ == "__main__":

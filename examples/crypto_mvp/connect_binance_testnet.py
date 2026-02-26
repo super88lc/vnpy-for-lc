@@ -20,6 +20,7 @@ PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from local_config import LocalProfile
 from vnpy.event import Event, EventEngine
 from vnpy.trader.constant import Exchange
 from vnpy.trader.engine import MainEngine
@@ -81,9 +82,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--server",
-        choices=["TESTNET", "REAL"],
-        default="TESTNET",
-        help="Server target. For key verification, TESTNET is recommended.",
+        choices=["AUTO", "TESTNET", "REAL"],
+        default="AUTO",
+        help="Server target. AUTO means using local profile value.",
     )
     parser.add_argument(
         "--timeout",
@@ -99,11 +100,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--kline-stream",
         type=parse_bool,
-        default=True,
+        default=None,
         help="Whether to enable kline stream subscription (true/false).",
     )
+    parser.add_argument("--profile", default="default", help="Local profile name.")
+    parser.add_argument(
+        "--use-local-profile",
+        type=parse_bool,
+        default=True,
+        help="Load defaults (proxy/server/keys) from local profile first.",
+    )
     parser.add_argument("--proxy-host", default="", help="Proxy host.")
-    parser.add_argument("--proxy-port", type=int, default=0, help="Proxy port.")
+    parser.add_argument("--proxy-port", type=int, default=-1, help="Proxy port.")
     parser.add_argument("--api-key", default="", help="Binance API key.")
     parser.add_argument("--api-secret", default="", help="Binance API secret.")
     parser.add_argument(
@@ -142,6 +150,47 @@ def resolve_credentials(args: argparse.Namespace) -> tuple[str, str]:
     return api_key, api_secret
 
 
+def build_gateway_setting(args: argparse.Namespace) -> dict[str, str | int]:
+    """Build gateway settings from local profile + cli overrides + env fallback."""
+    profile = LocalProfile(profile=args.profile)
+    market: str = args.market
+
+    setting: dict[str, str | int]
+    if args.use_local_profile:
+        setting = profile.build_binance_gateway_setting(market)
+    else:
+        setting = {
+            "API Key": "",
+            "API Secret": "",
+            "Server": "TESTNET",
+            "Kline Stream": "True",
+            "Proxy Host": "",
+            "Proxy Port": 0,
+        }
+
+    api_key, api_secret = resolve_credentials(args)
+    if api_key:
+        setting["API Key"] = api_key
+    if api_secret:
+        setting["API Secret"] = api_secret
+
+    if args.server and args.server != "AUTO":
+        setting["Server"] = args.server
+    if args.kline_stream is not None:
+        setting["Kline Stream"] = "True" if args.kline_stream else "False"
+    if args.proxy_host:
+        setting["Proxy Host"] = args.proxy_host
+    if args.proxy_port >= 0:
+        setting["Proxy Port"] = args.proxy_port
+
+    if not setting["Proxy Host"]:
+        setting["Proxy Host"] = os.getenv("BINANCE_PROXY_HOST", "").strip()
+    if int(setting["Proxy Port"]) <= 0:
+        setting["Proxy Port"] = int(os.getenv("BINANCE_PROXY_PORT", "0") or "0")
+
+    return setting
+
+
 def choose_gateway(market: str) -> type:
     """Choose gateway class by market."""
     gateway_map: dict[str, type] = {
@@ -162,7 +211,9 @@ def mask_key(value: str) -> str:
 def main() -> int:
     """Program entry."""
     args = parse_args()
-    api_key, api_secret = resolve_credentials(args)
+    setting = build_gateway_setting(args)
+    api_key: str = str(setting["API Key"]).strip()
+    api_secret: str = str(setting["API Secret"]).strip()
 
     if not api_key or not api_secret:
         print("[ERROR] 未检测到 Binance API Key/Secret。")
@@ -177,7 +228,9 @@ def main() -> int:
     state = ProbeState()
 
     print("[INFO] ===== Binance 连接探测开始 =====")
-    print(f"[INFO] market={args.market}, server={args.server}, gateway={gateway_name}")
+    print(f"[INFO] market={args.market}, server={setting['Server']}, gateway={gateway_name}")
+    print(f"[INFO] profile={args.profile}, use_local_profile={args.use_local_profile}")
+    print(f"[INFO] proxy={setting['Proxy Host']}:{setting['Proxy Port']}")
     print(f"[INFO] api_key={mask_key(api_key)}")
 
     event_engine = EventEngine()
@@ -226,15 +279,6 @@ def main() -> int:
     event_engine.register(EVENT_TICK, on_tick)
 
     main_engine.add_gateway(gateway_class)
-
-    setting: dict[str, str | int] = {
-        "API Key": api_key,
-        "API Secret": api_secret,
-        "Server": args.server,
-        "Kline Stream": "True" if args.kline_stream else "False",
-        "Proxy Host": args.proxy_host or os.getenv("BINANCE_PROXY_HOST", "").strip(),
-        "Proxy Port": args.proxy_port or int(os.getenv("BINANCE_PROXY_PORT", "0") or "0"),
-    }
 
     target_symbol: str = args.symbol.strip().upper()
     subscribed_symbol: str = ""

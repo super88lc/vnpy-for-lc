@@ -38,6 +38,13 @@ _templates
 .DS_Store
 *.mo
 
+# Local secrets
+.env
+.env.*
+*.secrets.json
+*.secrets.yaml
+*.secrets.yml
+
 # Alpha
 lab/
 /.mypy_cache
