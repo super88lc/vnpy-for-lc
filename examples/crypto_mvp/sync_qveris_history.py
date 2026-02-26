@@ -49,8 +49,17 @@ def main() -> int:
     start = parse_datetime(args.start)
     end = parse_datetime(args.end)
 
-    service = QverisBacktestDataService(profile_name=args.profile)
-    rows, stats = service.get_or_fetch_bars(args.symbol.upper(), args.interval, start, end)
+    try:
+        service = QverisBacktestDataService(profile_name=args.profile)
+        rows, stats = service.get_or_fetch_bars(args.symbol.upper(), args.interval, start, end)
+    except Exception as exc:
+        print(f"[FAIL] 历史数据同步失败: {exc}")
+        print("[HINT] 请先执行：")
+        print(
+            "  python3 examples/crypto_mvp/config_cli.py "
+            f"--profile {args.profile} set-qveris --base-url \"https://your-qveris-endpoint\""
+        )
+        return 2
 
     print("[INFO] ===== Qveris历史数据同步完成 =====")
     print(f"[SUMMARY] symbol={args.symbol.upper()} interval={args.interval}")

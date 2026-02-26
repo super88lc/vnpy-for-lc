@@ -87,7 +87,11 @@ def parse_args() -> argparse.Namespace:
         default="AUTO",
         help="Gateway server override. AUTO means using profile value.",
     )
-    parser.add_argument("--proxy-host", default="", help="Proxy host override.")
+    parser.add_argument(
+        "--proxy-host",
+        default=None,
+        help="Proxy host override. Use --proxy-host \"\" to clear profile proxy.",
+    )
     parser.add_argument("--proxy-port", type=int, default=-1, help="Proxy port override.")
     parser.add_argument(
         "--kline-stream",
@@ -206,7 +210,7 @@ def build_binance_gateway_setting(args: argparse.Namespace) -> dict[str, str | i
     if args.kline_stream is not None:
         setting["Kline Stream"] = "True" if args.kline_stream else "False"
 
-    if args.proxy_host:
+    if args.proxy_host is not None:
         setting["Proxy Host"] = args.proxy_host
     if args.proxy_port >= 0:
         setting["Proxy Port"] = args.proxy_port

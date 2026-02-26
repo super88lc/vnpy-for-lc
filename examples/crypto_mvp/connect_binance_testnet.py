@@ -110,7 +110,11 @@ def parse_args() -> argparse.Namespace:
         default=True,
         help="Load defaults (proxy/server/keys) from local profile first.",
     )
-    parser.add_argument("--proxy-host", default="", help="Proxy host.")
+    parser.add_argument(
+        "--proxy-host",
+        default=None,
+        help="Proxy host override. Use --proxy-host \"\" to clear profile proxy.",
+    )
     parser.add_argument("--proxy-port", type=int, default=-1, help="Proxy port.")
     parser.add_argument("--api-key", default="", help="Binance API key.")
     parser.add_argument("--api-secret", default="", help="Binance API secret.")
@@ -178,7 +182,7 @@ def build_gateway_setting(args: argparse.Namespace) -> dict[str, str | int]:
         setting["Server"] = args.server
     if args.kline_stream is not None:
         setting["Kline Stream"] = "True" if args.kline_stream else "False"
-    if args.proxy_host:
+    if args.proxy_host is not None:
         setting["Proxy Host"] = args.proxy_host
     if args.proxy_port >= 0:
         setting["Proxy Port"] = args.proxy_port

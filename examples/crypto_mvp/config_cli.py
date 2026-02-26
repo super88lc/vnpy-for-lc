@@ -275,6 +275,8 @@ def cmd_security_check() -> int:
     matched: list[str] = []
     for path in tracked_files:
         lowered = path.lower()
+        if lowered.endswith(".env.example") or lowered.endswith("env.example"):
+            continue
         if any(token in lowered for token in suspicious_patterns):
             matched.append(path)
 
