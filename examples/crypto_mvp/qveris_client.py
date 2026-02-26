@@ -15,7 +15,10 @@ from urllib.parse import urljoin
 
 import requests
 
-from local_config import LocalProfile
+try:
+    from examples.crypto_mvp.local_config import LocalProfile
+except ModuleNotFoundError:
+    from local_config import LocalProfile
 
 
 def _ensure_utc(dt: datetime) -> datetime:

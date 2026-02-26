@@ -12,8 +12,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
-from local_config import LocalProfile
-from qveris_client import OhlcvBar
+try:
+    from examples.crypto_mvp.local_config import LocalProfile
+    from examples.crypto_mvp.qveris_client import OhlcvBar
+except ModuleNotFoundError:
+    from local_config import LocalProfile
+    from qveris_client import OhlcvBar
 
 
 def _ensure_utc(dt: datetime) -> datetime:

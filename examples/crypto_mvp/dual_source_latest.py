@@ -14,14 +14,24 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from time import sleep
 from typing import Any
 from urllib.parse import urljoin
+import sys
 
 import requests
 
-from local_config import LocalProfile
-from qveris_client import QverisClient
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+try:
+    from examples.crypto_mvp.local_config import LocalProfile
+    from examples.crypto_mvp.qveris_client import QverisClient
+except ModuleNotFoundError:
+    from local_config import LocalProfile
+    from qveris_client import QverisClient
 
 
 @dataclass

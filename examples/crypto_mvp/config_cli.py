@@ -14,16 +14,26 @@ from getpass import getpass
 from pathlib import Path
 from typing import Any
 
-from local_config import (
-    PROFILES_DIR,
-    LocalProfile,
-    ROOT_DIR,
-    ensure_dirs,
-    mask_secret,
-)
-
-
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+try:
+    from examples.crypto_mvp.local_config import (
+        PROFILES_DIR,
+        LocalProfile,
+        ROOT_DIR,
+        ensure_dirs,
+        mask_secret,
+    )
+except ModuleNotFoundError:
+    from local_config import (
+        PROFILES_DIR,
+        LocalProfile,
+        ROOT_DIR,
+        ensure_dirs,
+        mask_secret,
+    )
 
 
 def parse_bool(value: str) -> bool:

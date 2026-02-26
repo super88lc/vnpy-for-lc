@@ -20,7 +20,10 @@ PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from local_config import LocalProfile
+try:
+    from examples.crypto_mvp.local_config import LocalProfile
+except ModuleNotFoundError:
+    from local_config import LocalProfile
 from vnpy.event import Event, EventEngine
 from vnpy.trader.constant import Exchange
 from vnpy.trader.engine import MainEngine

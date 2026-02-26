@@ -23,8 +23,12 @@ if str(PROJECT_ROOT) not in sys.path:
 from vnpy.trader.constant import Exchange, Interval
 from vnpy.trader.object import BarData
 
-from bar_cache import LocalBarCache
-from qveris_client import OhlcvBar, QverisClient
+try:
+    from examples.crypto_mvp.bar_cache import LocalBarCache
+    from examples.crypto_mvp.qveris_client import OhlcvBar, QverisClient
+except ModuleNotFoundError:
+    from bar_cache import LocalBarCache
+    from qveris_client import OhlcvBar, QverisClient
 
 
 def _ensure_utc(dt: datetime) -> datetime:
