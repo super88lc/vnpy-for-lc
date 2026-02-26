@@ -280,12 +280,16 @@ def main() -> int:
         print("[PASS] 测试通过：API Key可用，网关连接链路已打通。")
         return 0
 
+    joined_errors: str = " | ".join(state.error_logs).lower()
+
     print("[FAIL] 测试未通过：未在超时时间内拿到账户/合约/行情关键事件。")
     print("[HINT] 常见排查方向：")
     print("  1) API Key/Secret 是否来自正确测试网（spot 与 futures 不通用）")
     print("  2) 是否启用了IP白名单且当前出口IP不在列表中")
     print("  3) 云主机时间是否漂移（timestamp/signature相关错误）")
     print("  4) 代理配置是否正确（Proxy Host/Port）")
+    if "restricted location" in joined_errors or " 451" in joined_errors:
+        print("  5) 当前出口IP可能触发Binance地区限制（451），请更换网络出口或代理")
     return 2
 
 

@@ -198,3 +198,5 @@ python3 examples/crypto_mvp/connect_binance_testnet.py \
 - `contracts > 0`
 - 若指定了 `--symbol`，则 `ticks > 0`
 
+若出现 `451 restricted location`，通常是当前网络出口触发了Binance地区限制，需要更换出口IP或代理后重试。
+
