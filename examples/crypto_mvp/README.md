@@ -37,11 +37,24 @@
 
 ## 3. 启动示例
 
+### 3.0 先安装最小依赖
+
+如果你是直接在源码目录运行（而不是已安装的venv），先安装依赖：
+
+```bash
+python3 -m pip install --upgrade tzlocal loguru ta-lib
+python3 -m pip install --upgrade vnpy_binance
+```
+
+如果你使用 OKX/Bybit，请把第二行替换为对应包名（`vnpy_okx`/`vnpy_bybit`）。
+
 ### 3.1 仅加载网关（无UI）
 
 ```bash
 python examples/crypto_mvp/run.py --mode no_ui --gateway-module vnpy_binance
 ```
+
+`--mode nu_ui` 也被兼容，会自动按 `no_ui` 处理。
 
 若模块里有多个网关类，请显式指定：
 
@@ -50,6 +63,15 @@ python examples/crypto_mvp/run.py \
   --mode no_ui \
   --gateway-module vnpy_okx \
   --gateway-class OkxGateway
+```
+
+对于 Binance，你也可以直接指定市场类型（自动选择对应网关类）：
+
+```bash
+python3 examples/crypto_mvp/run.py \
+  --mode no_ui \
+  --gateway-module vnpy_binance \
+  --market spot
 ```
 
 ### 3.2 加载网关 + 应用模块（无UI）

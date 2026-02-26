@@ -10,14 +10,22 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import sys
 from importlib import import_module
+from pathlib import Path
+from time import sleep
 from typing import Any
+
+# Ensure local source checkout (/workspace) is importable when script is started
+# as: python3 examples/crypto_mvp/run.py
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from vnpy.event import EventEngine
 from vnpy.trader.app import BaseApp
 from vnpy.trader.engine import MainEngine
 from vnpy.trader.gateway import BaseGateway
-from vnpy.trader.ui import MainWindow, create_qapp
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,9 +33,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Crypto MVP starter for VeighNa")
     parser.add_argument(
         "--mode",
-        choices=["ui", "no_ui"],
         default="no_ui",
-        help="Startup mode.",
+        help="Startup mode: ui/no_ui (nu_ui is also accepted).",
     )
     parser.add_argument(
         "--gateway-module",
@@ -40,6 +47,12 @@ def parse_args() -> argparse.Namespace:
         help="Gateway class name. If empty, auto-discover from module.",
     )
     parser.add_argument(
+        "--market",
+        choices=["auto", "spot", "linear", "inverse"],
+        default="auto",
+        help="Market type hint for modules with multiple gateway classes.",
+    )
+    parser.add_argument(
         "--apps",
         default="",
         help=(
@@ -48,7 +61,19 @@ def parse_args() -> argparse.Namespace:
             "Example: 'vnpy_ctastrategy:CtaStrategyApp,vnpy_riskmanager:RiskManagerApp'"
         ),
     )
-    return parser.parse_args()
+    args: argparse.Namespace = parser.parse_args()
+
+    mode_aliases: dict[str, str] = {
+        "nu_ui": "no_ui",
+        "noui": "no_ui",
+        "no-ui": "no_ui",
+    }
+    normalized_mode: str = mode_aliases.get(args.mode, args.mode)
+    if normalized_mode not in {"ui", "no_ui"}:
+        parser.error(f"--mode 仅支持 ui/no_ui，当前为: {args.mode}")
+
+    args.mode = normalized_mode
+    return args
 
 
 def import_module_or_raise(module_name: str) -> Any:
@@ -62,7 +87,7 @@ def import_module_or_raise(module_name: str) -> Any:
         ) from exc
 
 
-def load_gateway_class(module_name: str, class_name: str) -> type[BaseGateway]:
+def load_gateway_class(module_name: str, class_name: str, market: str) -> type[BaseGateway]:
     """Load gateway class by explicit class name or auto-discovery."""
     module: Any = import_module_or_raise(module_name)
 
@@ -83,6 +108,21 @@ def load_gateway_class(module_name: str, class_name: str) -> type[BaseGateway]:
 
     if len(candidates) == 1:
         return candidates[0]
+
+    lowered_name_map: dict[str, type[BaseGateway]] = {
+        candidate.__name__.lower(): candidate for candidate in candidates
+    }
+
+    if market != "auto":
+        for key, candidate in lowered_name_map.items():
+            if market in key:
+                return candidate
+
+    # Default heuristic: for crypto module with multiple classes, prefer spot.
+    for preferred_market in ("spot", "linear", "inverse"):
+        for key, candidate in lowered_name_map.items():
+            if preferred_market in key:
+                return candidate
 
     names: list[str] = [c.__name__ for c in candidates]
     raise RuntimeError(
@@ -119,10 +159,11 @@ def load_app_classes(spec: str) -> list[type[BaseApp]]:
 def bootstrap_engine(
     gateway_module: str,
     gateway_class_name: str,
+    market: str,
     apps: str,
 ) -> tuple[MainEngine, EventEngine]:
     """Build MainEngine and load gateway/apps."""
-    gateway_class: type[BaseGateway] = load_gateway_class(gateway_module, gateway_class_name)
+    gateway_class: type[BaseGateway] = load_gateway_class(gateway_module, gateway_class_name, market)
     app_classes: list[type[BaseApp]] = load_app_classes(apps)
 
     event_engine: EventEngine = EventEngine()
@@ -138,27 +179,37 @@ def bootstrap_engine(
     return main_engine, event_engine
 
 
-def run_ui(gateway_module: str, gateway_class_name: str, apps: str) -> None:
+def run_ui(gateway_module: str, gateway_class_name: str, market: str, apps: str) -> None:
     """Run with VeighNa Trader GUI."""
+    from vnpy.trader.ui import MainWindow, create_qapp
+
     qapp = create_qapp()
-    main_engine, event_engine = bootstrap_engine(gateway_module, gateway_class_name, apps)
+    main_engine, event_engine = bootstrap_engine(gateway_module, gateway_class_name, market, apps)
     main_window = MainWindow(main_engine, event_engine)
     main_window.showMaximized()
     qapp.exec()
 
 
-def run_no_ui(gateway_module: str, gateway_class_name: str, apps: str) -> None:
+def run_no_ui(gateway_module: str, gateway_class_name: str, market: str, apps: str) -> None:
     """Run in no-UI mode and print startup status."""
-    bootstrap_engine(gateway_module, gateway_class_name, apps)
+    main_engine, _ = bootstrap_engine(gateway_module, gateway_class_name, market, apps)
+    print("[RUNNING] no_ui 模式已启动，按 Ctrl+C 退出。")
+
+    try:
+        while True:
+            sleep(1)
+    except KeyboardInterrupt:
+        print("\n[STOP] 收到退出信号，正在关闭引擎...")
+        main_engine.close()
 
 
 def main() -> None:
     """Program entry."""
     args = parse_args()
     if args.mode == "ui":
-        run_ui(args.gateway_module, args.gateway_class, args.apps)
+        run_ui(args.gateway_module, args.gateway_class, args.market, args.apps)
     else:
-        run_no_ui(args.gateway_module, args.gateway_class, args.apps)
+        run_no_ui(args.gateway_module, args.gateway_class, args.market, args.apps)
 
 
 if __name__ == "__main__":
