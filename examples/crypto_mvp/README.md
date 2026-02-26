@@ -13,6 +13,8 @@
 ## 1. 你会用到的文件
 
 - `run.py`：MVP启动脚本，支持动态加载加密网关与应用模块
+- `connect_binance_testnet.py`：Binance测试网连通性与API Key诊断脚本
+- `binance_testnet.env.example`：Binance测试网环境变量模板
 - `week1_checklist.md`：第一周任务拆解（按天、到文件级）
 
 ---
@@ -143,4 +145,56 @@ crypto_platform/
 - 多策略组合
 - 分布式与容器化
 - 实盘可观测性与自动恢复
+
+---
+
+## 7. Binance 测试网连接与Key诊断（推荐先做）
+
+### 7.1 准备环境变量
+
+```bash
+cp examples/crypto_mvp/binance_testnet.env.example .env.binance.testnet
+# 编辑 .env.binance.testnet 填入你的Key
+set -a
+source .env.binance.testnet
+set +a
+```
+
+### 7.2 执行连通性探测
+
+现货测试网：
+
+```bash
+python3 examples/crypto_mvp/connect_binance_testnet.py \
+  --market spot \
+  --server TESTNET \
+  --timeout 25
+```
+
+U本位合约测试网：
+
+```bash
+python3 examples/crypto_mvp/connect_binance_testnet.py \
+  --market linear \
+  --server TESTNET \
+  --timeout 25
+```
+
+带行情订阅验证（可选）：
+
+```bash
+python3 examples/crypto_mvp/connect_binance_testnet.py \
+  --market spot \
+  --server TESTNET \
+  --symbol BTCUSDT \
+  --timeout 30
+```
+
+### 7.3 通过标准
+
+探测脚本输出 `PASS`，且 summary 里：
+
+- `accounts > 0`
+- `contracts > 0`
+- 若指定了 `--symbol`，则 `ticks > 0`
 
